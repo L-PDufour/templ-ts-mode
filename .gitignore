@@ -15,3 +15,5 @@
 
 # Nix testing
 /result
+templ-ts-mode-autoloads.el
+templ-ts-mode-pkg.el

@@ -4,7 +4,7 @@
 
 ;; Author: David Anderson <dave@natulte.net>
 ;; Created: 2024-01-01
-;; Version: 0.1
+;; Version: 0.2
 ;; Keywords: languages
 ;; Package-Requires: ((emacs "29.1"))
 ;; URL: https://github.com/danderson/templ-ts-mode
@@ -53,7 +53,13 @@
   "Configuration for downloading and installing the tree-sitter language grammar."
   :type '(string)
   :group 'templ-ts
-  :version "0.1")
+  :version "0.2")
+
+(defcustom templ-ts-mode-grammar-version "v2.1.0"
+  "Version of the tree-sitter grammar to use."
+  :type '(string)
+  :group 'templ-ts
+  :version "0.2")
 
 (defcustom templ-ts-mode-grammar-install 'prompt
   "Automatic installation of the tree-sitter language grammar library."
@@ -61,7 +67,7 @@
                  (const :tag "Prompt to install" prompt)
                  (const :tag "Do not install" nil))
   :group 'templ-ts
-  :version "0.1")
+  :version "0.2")
 
 (defvar templ-ts--go-font-lock-rules
   ;; Rules taken from go-ts-mode--font-lock-settings.  Unfortunately I
@@ -235,15 +241,13 @@
      ;; no-node rule that would overrule all rules that come after.
      ,@(cdar go-ts-mode--indent-rules))))
 
-(defun templ-ts--treesit-update-ranges (start end)
-  "Update child parser ranges between START and END."
-  (ignore start end)
-  (let ((js-ranges (or (treesit-query-range 'templ '((script_block_text) @js))
-                       '((1 . 1)))))
-    (treesit-parser-set-included-ranges (treesit-parser-create 'javascript) js-ranges)))
+
 
 (defvar templ-ts--range-rules
-  '(templ-ts--treesit-update-ranges))
+  (treesit-range-rules
+   :embed 'javascript
+   :host 'templ
+   '((script_block_text) @js)))
 
 (defvar templ-ts--font-lock-feature-list
   '((comment definition)
@@ -253,18 +257,16 @@
 
 (defun templ-ts--treesit-language-at-point (point)
   "Return the language at POINT."
-  (let ((js (treesit-parser-create 'javascript)))
-    (if (null (treesit-parser-included-ranges js))
+  (let ((js-parser (treesit-parser-create 'javascript)))
+    (if (null (treesit-parser-included-ranges js-parser))
         'templ
-      (let ((js-range (treesit-parser-range-on js point)))
-        (cond
-         ((null js-range)
-          'templ)
-         ((eq point (car js-range))
-          'templ)
-         ((eq point (cdr js-range))
-          'templ)
-         (t 'javascript))))))
+      (let ((ranges (treesit-parser-included-ranges js-parser)))
+        (if (cl-some (lambda (range)
+                       (and (>= point (car range))
+                            (< point (cdr range))))
+                     ranges)
+            'javascript
+          'templ)))))
 
 (defun templ-ts--setup ()
   "Setup for `templ-ts-mode`."
@@ -276,7 +278,7 @@
 
   ;; Grammar.
   (setq-local treesit-language-source-alist
-              `((templ . (,templ-ts-mode-grammar))))
+              `((templ . (,templ-ts-mode-grammar ,templ-ts-mode-grammar-version))))
 
   (when (and (not (treesit-language-available-p 'templ))
              (pcase templ-ts-mode-grammar-install
@@ -305,9 +307,8 @@
   (setq-local treesit-language-at-point-function
               #'templ-ts--treesit-language-at-point)
 
-  (setq-local treesit-range-settings
-              (apply #'treesit-range-rules
-                     templ-ts--range-rules))
+  ;; Use the modern range rules directly
+  (setq-local treesit-range-settings templ-ts--range-rules)
 
   ;; Indent.
   (setq-local indent-tabs-mode t
@@ -329,17 +330,13 @@
                      (js-compiled js--treesit-font-lock-settings))
                 (append js-compiled root-compiled)))
 
-  (treesit-major-mode-setup))
-
-;;;###autoload
+  (treesit-major-mode-setup));;;###autoload
 (define-derived-mode templ-ts-mode prog-mode "Templ"
   "Major mode for editing Templ files."
   :group 'templ-ts
 
   (templ-ts--setup))
 
-(add-to-list 'eglot-server-programs '(templ-ts-mode
-                                      "templ" "lsp"))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.templ\\'" . templ-ts-mode))
