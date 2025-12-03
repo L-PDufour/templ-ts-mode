@@ -87,11 +87,14 @@
 
    :language 'templ
    :feature 'constant
-   `([(false) (nil) (true)] @font-lock-constant-face
-     ,@(when (go-ts-mode--iota-query-supported-p)
-         '((iota) @font-lock-constant-face))
-     (const_declaration
-      (const_spec name: (identifier) @font-lock-constant-face)))
+   (treesit-query-with-optional 'go
+     '([(false) (nil) (true)] @font-lock-constant-face
+       (const_declaration
+        (const_spec name: (identifier) @font-lock-constant-face
+                    ("," name: (identifier) @font-lock-constant-face)*)))
+     ;; Optional query added in newer version.
+     '((iota) @font-lock-constant-face))
+
 
    :language 'templ
    :feature 'delimiter
@@ -99,24 +102,32 @@
 
    :language 'templ
    :feature 'definition
-   `((function_declaration
-      name: (identifier) @font-lock-function-name-face)
-     (method_declaration
-      name: (field_identifier) @font-lock-function-name-face)
-     (,(if (go-ts-mode--method-elem-supported-p)
-           'method_elem
-         'method_spec)
-      name: (field_identifier) @font-lock-function-name-face)
-     (field_declaration
-      name: (field_identifier) @font-lock-property-name-face)
-     (parameter_declaration
-      name: (identifier) @font-lock-variable-name-face)
-     (short_var_declaration
-      left: (expression_list
-             (identifier) @font-lock-variable-name-face
-             ("," (identifier) @font-lock-variable-name-face)*))
-     (var_spec name: (identifier) @font-lock-variable-name-face
-               ("," name: (identifier) @font-lock-variable-name-face)*))
+   (treesit-query-with-optional 'go
+     '((function_declaration
+        name: (identifier) @font-lock-function-name-face)
+       (method_declaration
+        name: (field_identifier) @font-lock-function-name-face)
+       (field_declaration
+        name: (field_identifier) @font-lock-property-name-face)
+       (parameter_declaration
+        name: (identifier) @font-lock-variable-name-face)
+       (variadic_parameter_declaration
+        name: (identifier) @font-lock-variable-name-face)
+       (short_var_declaration
+        left: (expression_list
+               (identifier) @font-lock-variable-name-face
+               ("," (identifier) @font-lock-variable-name-face)*))
+       (var_spec name: (identifier) @font-lock-variable-name-face
+                 ("," name: (identifier) @font-lock-variable-name-face)*)
+       (range_clause
+        left: (expression_list
+               (identifier) @font-lock-variable-name-face)))
+     ;; tree-sitter-go changed method_spec to method_elem in
+     ;; https://github.com/tree-sitter/tree-sitter-go/commit/b82ab803d887002a0af11f6ce63d72884580bf33
+     '((method_elem
+        name: (field_identifier) @font-lock-function-name-face))
+     '((method_spec
+        name: (field_identifier) @font-lock-function-name-face)))
 
    :language 'templ
    :feature 'function
@@ -173,47 +184,47 @@
   ;; Unlike the previous var, these rules are specific to Templ's
   ;; syntax extensions.
   '(:language templ
-    :feature keyword
-    (["templ" "css" "script"] @font-lock-keyword-face)
+              :feature keyword
+              (["templ" "css" "script"] @font-lock-keyword-face)
 
-    :language templ
-    :feature definition
-    ((component_declaration name: (component_identifier) @font-lock-function-name-face)
-     (css_declaration name: (css_identifier) @font-lock-function-name-face)
-     (script_declaration name: (script_identifier) @font-lock-function-name-face))
+              :language templ
+              :feature definition
+              ((component_declaration name: (component_identifier) @font-lock-function-name-face)
+               (css_declaration name: (css_identifier) @font-lock-function-name-face)
+               (script_declaration name: (script_identifier) @font-lock-function-name-face))
 
-    :language templ
-    :feature delimiter
-    (["<!" "<" ">" "/>" "</"] @font-lock-bracket-face)
+              :language templ
+              :feature delimiter
+              (["<!" "<" ">" "/>" "</"] @font-lock-bracket-face)
 
-    :language templ
-    :feature attribute
-    ((attribute name: (attribute_name) @font-lock-constant-face
-                "=" @font-lock-bracket-face
-                value: (quoted_attribute_value) @font-lock-string-face)
-     (attribute name: (attribute_name) @font-lock-constant-face
-                "=" @font-lock-bracket-face
-                value: (attribute_value) @font-lock-constant-face))
+              :language templ
+              :feature attribute
+              ((attribute name: (attribute_name) @font-lock-constant-face
+                          "=" @font-lock-bracket-face
+                          value: (quoted_attribute_value) @font-lock-string-face)
+               (attribute name: (attribute_name) @font-lock-constant-face
+                          "=" @font-lock-bracket-face
+                          value: (attribute_value) @font-lock-constant-face))
 
-    :language templ
-    :feature tag
-    ((tag_start name: (element_identifier) @font-lock-function-call-face)
-     (tag_end name: (element_identifier) @font-lock-function-call-face)
-     (self_closing_tag name: (element_identifier) @font-lock-function-call-face))
+              :language templ
+              :feature tag
+              ((tag_start name: (element_identifier) @font-lock-function-call-face)
+               (tag_end name: (element_identifier) @font-lock-function-call-face)
+               (self_closing_tag name: (element_identifier) @font-lock-function-call-face))
 
-    :language templ
-    :feature function
-    ((component_import "@" @font-lock-bracket-face
-                       name: (component_identifier) @font-lock-function-call-face))
+              :language templ
+              :feature function
+              ((component_import "@" @font-lock-bracket-face
+                                 name: (component_identifier) @font-lock-function-call-face))
 
-    :language templ
-    :feature property
-    ((css_property_name) @css-property)))
+              :language templ
+              :feature property
+              ((css_property_name) @css-property)))
 
 (defvar templ-ts--indent-rules
   `(;; Javascript used for script blocks that use the javascript
     ;; sub-parser.
-    ,(car js--treesit-indent-rules)
+    ,(car (js--treesit-indent-rules))
     ;; Templ rules, for the rest of the file.
     (templ
 
@@ -225,7 +236,8 @@
      ;; element indent logic below for components.
 
      ;; HTML elements and attributes within components.
-     ((node-is "/>") parent-bol 1)
+     ((node-is "/>") parent-bol
+      1)
      ((node-is "tag_end") parent-bol 0)
      ((node-is "attribute") prev-sibling 0)
      ((node-is "script_element_text") parent-bol go-ts-mode-indent-offset)
@@ -327,7 +339,7 @@
                                          templ-ts--go-font-lock-rules))
                      (root-compiled (apply #'treesit-font-lock-rules
                                            root-rules))
-                     (js-compiled js--treesit-font-lock-settings))
+                     (js-compiled (js--treesit-font-lock-settings)))
                 (append js-compiled root-compiled)))
 
   (treesit-major-mode-setup));;;###autoload
