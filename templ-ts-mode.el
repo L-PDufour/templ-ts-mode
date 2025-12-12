@@ -6,7 +6,7 @@
 ;; Created: 2024-01-01
 ;; Version: 0.2
 ;; Keywords: languages
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "30.2"))
 ;; URL: https://github.com/danderson/templ-ts-mode
 
 ;; This file is not a part of GNU Emacs.
@@ -42,6 +42,23 @@
 (require 'go-ts-mode)
 (require 'js)
 (require 'css-mode)
+;; Compatibility shim for Emacs 30.x
+;; treesit-query-with-optional was added after Emacs 30.2 release
+(defun treesit-query-with-optional (language mandatory &rest queries)
+  "Return the MANDATORY query plus first valid QUERIES.
+
+MANDATORY query is always included.  Queries in QUERIES are included if
+they're valid.  MANDATORY query and queries in QUERIES must be in sexp
+form for composition.
+
+Use LANGUAGE for validating queries."
+  (declare (indent 1))
+  (let (optional)
+    (dolist (query queries)
+      (ignore-errors
+        (when (treesit--compile-query-with-cache language query)
+          (push query optional))))
+    (append mandatory optional)))
 
 (defgroup templ-ts nil
   "Major mode for Templ, using Tree-Sitter."
@@ -224,8 +241,8 @@
 (defvar templ-ts--indent-rules
   `(;; Javascript used for script blocks that use the javascript
     ;; sub-parser.
-    ,(car (js--treesit-indent-rules))
-    ;; Templ rules, for the rest of the file.
+    ,(car js--treesit-indent-rules)
+    ;; Templ Rules, for the rest of the file.
     (templ
 
      ((parent-is "css_declaration") parent-bol go-ts-mode-indent-offset)
@@ -339,7 +356,7 @@
                                          templ-ts--go-font-lock-rules))
                      (root-compiled (apply #'treesit-font-lock-rules
                                            root-rules))
-                     (js-compiled (js--treesit-font-lock-settings)))
+                     (js-compiled js--treesit-font-lock-settings))
                 (append js-compiled root-compiled)))
 
   (treesit-major-mode-setup));;;###autoload
